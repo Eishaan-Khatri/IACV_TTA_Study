@@ -1,0 +1,36 @@
+seed: 42
+device: auto
+
+data:
+  root: data
+  dataset: cifar10
+  corruption_dataset: cifar10c
+  first_pass_corruptions:
+    - gaussian_noise
+    - shot_noise
+    - motion_blur
+    - brightness
+    - fog
+  severities: [1, 2, 3, 4, 5]
+
+model:
+  architecture: cifar_resnet18
+  num_classes: 10
+  checkpoint: checkpoints/source_cifar10.pt
+
+train:
+  epochs: 30
+  batch_size: 128
+  lr: 0.001
+  weight_decay: 0.0005
+
+tta:
+  batch_size: 128
+  steps_per_batch: 1
+  lr: 0.00025
+  update_params: batch_norm_affine
+  ug_tent:
+    confidence_threshold: 0.70
+    entropy_threshold: null
+    min_selected_fraction: 0.10
+

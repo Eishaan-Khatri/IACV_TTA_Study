@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Large local artifacts
+data/
+checkpoints/
+*.pt
+*.pth
+*.tar
+*.npy
+
+# Keep generated summary files only when intentionally committed
+results/*.csv
+results/figures/*.png
+
