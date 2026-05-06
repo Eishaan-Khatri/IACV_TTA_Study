@@ -90,7 +90,43 @@ If training accuracy is too low, rerun with 30 epochs:
 !python scripts/summarize_results.py --results results/first_pass_results.csv
 ```
 
-### 7. Save Results
+### 7. Final Adaptive Run
+
+After the core run is complete and the source checkpoint exists, run the final suite:
+
+```bash
+!python scripts/run_study.py \
+  --config configs/default.yaml \
+  --data-root /content/drive/MyDrive/iacv_tta_data \
+  --epochs 15 \
+  --results results/adaptive_results.csv \
+  --variant-suite adaptive
+```
+
+Analyze variants:
+
+```bash
+!python scripts/analyze_variants.py --results results/adaptive_results.csv
+```
+
+### 8. Generate Final Plots
+
+```bash
+!python scripts/make_final_plots.py \
+  --results results/adaptive_results.csv \
+  --summary results/variant_summary.csv \
+  --by-severity results/variant_by_severity.csv \
+  --out-dir results/figures
+```
+
+This writes:
+
+- `results/figures/mean_accuracy_by_method.png`
+- `results/figures/accuracy_by_severity.png`
+- `results/figures/source_mix_delta_vs_tent_by_corruption.png`
+- `results/figures/negative_transfer_cases_by_method.png`
+
+### 9. Save Results
 
 ```bash
 !cp -r results /content/drive/MyDrive/iacv_tta_results
@@ -115,4 +151,3 @@ Example:
   --epochs 30 \
   --results results/first_pass_results.csv
 ```
-

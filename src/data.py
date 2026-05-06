@@ -11,6 +11,7 @@ import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
+from tqdm.auto import tqdm
 
 CIFAR10C_URL = "https://zenodo.org/records/2535967/files/CIFAR-10-C.tar?download=1"
 CIFAR10C_TAR = "CIFAR-10-C.tar"
@@ -88,13 +89,39 @@ def download_cifar10c(root: str | Path) -> Path:
         return target_dir
 
     tar_path = root / CIFAR10C_TAR
-    if not tar_path.exists():
-        print(f"Downloading CIFAR-10-C from {CIFAR10C_URL}")
-        urllib.request.urlretrieve(CIFAR10C_URL, tar_path)
+    part_path = tar_path.with_suffix(tar_path.suffix + ".part")
 
-    print(f"Extracting {tar_path}")
+    if tar_path.exists() and not tarfile.is_tarfile(tar_path):
+        print(f"Removing incomplete/corrupt archive {tar_path}", flush=True)
+        tar_path.unlink()
+
+    if not tar_path.exists():
+        print(f"Downloading CIFAR-10-C from {CIFAR10C_URL}", flush=True)
+
+        progress = tqdm(unit="B", unit_scale=True, unit_divisor=1024, miniters=1)
+
+        def reporthook(block_num: int, block_size: int, total_size: int) -> None:
+            if total_size > 0 and progress.total is None:
+                progress.total = total_size
+            downloaded = block_num * block_size
+            progress.update(downloaded - progress.n)
+
+        try:
+            if part_path.exists():
+                part_path.unlink()
+            urllib.request.urlretrieve(CIFAR10C_URL, part_path, reporthook=reporthook)
+            part_path.replace(tar_path)
+        finally:
+            progress.close()
+            if part_path.exists():
+                part_path.unlink()
+    else:
+        print(f"Using existing archive {tar_path}", flush=True)
+
+    print(f"Extracting {tar_path}", flush=True)
     with tarfile.open(tar_path) as tar:
         tar.extractall(root)
+    print(f"Extracted CIFAR-10-C to {target_dir}", flush=True)
     return target_dir
 
 

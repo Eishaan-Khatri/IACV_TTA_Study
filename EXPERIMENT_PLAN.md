@@ -190,3 +190,91 @@ Failure is still useful if documented:
 
 Implemented a CIFAR-10-C test-time adaptation study comparing source-only, BN adaptation, Tent-style entropy minimization, and uncertainty-gated adaptation across corruption severities; analyzed negative transfer and update reliability under severe shift.
 
+## Extended Variant Suite
+
+The first-pass run showed that BN adaptation and Tent recover large accuracy under severe noise/blur/fog shifts, but adaptation can hurt under mild brightness/fog. The extended suite therefore tests variants aimed at reducing negative transfer.
+
+Run:
+
+```bash
+python scripts/run_study.py \
+  --config configs/colab.yaml \
+  --data-root /content/drive/MyDrive/iacv_tta_data \
+  --epochs 15 \
+  --results results/extended_results.csv \
+  --variant-suite extended
+python scripts/analyze_variants.py --results results/extended_results.csv
+```
+
+Variants:
+
+- `ug_tent_conf_080`, `ug_tent_conf_090`: stricter confidence-gated Tent. Tests whether the original 0.70 threshold was too permissive.
+- `margin_tent_040`, `margin_tent_060`: updates only when the top-1/top-2 probability margin is large. This is stricter than max-softmax confidence.
+- `anchor_tent_010`, `anchor_tent_030`: adds a KL anchor to the frozen source model's predictions. Tests whether source anchoring reduces damage on mild shifts.
+- `anchor_ug_tent_020_c080`: combines source anchoring with confidence gating.
+- `source_mix_tent_050`, `source_mix_tent_075`: adapts like Tent, but predicts with a source/adapted logit ensemble. Tests whether ensembling protects source behavior while preserving adaptation gains.
+
+Primary analysis:
+
+- mean accuracy
+- negative-transfer count vs source-only
+- delta vs Tent
+- update ratio
+- severity-wise behavior
+
+Do not claim novelty from these variants without literature review. The safe claim is that they are exploratory stabilization variants inspired by the failure modes observed in the first-pass run.
+
+## Adaptive Source-Mix Extension
+
+The extended run found that fixed `source_mix_tent_075` improved mean accuracy and reduced negative-transfer cases, but it still underperformed Tent on some severe noise settings. This suggests that a fixed mix weight is too rigid:
+
+- mild brightness/fog: source model is already reliable, so use more source logits
+- severe noise/fog: source model is unreliable, so use more adapted logits
+
+The adaptive suite tests this idea directly.
+
+Run:
+
+```bash
+python scripts/run_study.py \
+  --config configs/colab.yaml \
+  --data-root /content/drive/MyDrive/iacv_tta_data \
+  --epochs 15 \
+  --results results/adaptive_results.csv \
+  --variant-suite adaptive
+python scripts/analyze_variants.py --results results/adaptive_results.csv
+```
+
+Adaptive variants:
+
+- `eg_mix_batch`: batch-level entropy-gap adaptive mixing.
+- `eg_mix_sample`: per-sample entropy-gap adaptive mixing.
+- `disagree_aware_mix`: if source/adapted predictions agree, mostly trust adapted logits; if they disagree, choose mix weight from entropy gap.
+- `probe_commit_tent`: makes a tentative Tent update, commits only if unlabeled safety checks pass, otherwise rolls back the update and predicts with the frozen source model.
+- `probe_commit_tent_loose`: same idea with looser thresholds.
+- `source_mix_tent_075`: fixed-mix reference from the previous run.
+
+Entropy-gap rule:
+
+```text
+gap = normalized_entropy(source_logits) - normalized_entropy(adapted_logits)
+```
+
+If `gap` is large and positive, the adapted model is more confident than the source model, so the method increases adapted-logit weight. If `gap` is negative, the source model is more confident, so it falls back toward source logits.
+
+This should be described as a student-proposed exploratory extension, not as a guaranteed novel method. Related literature already contains sample selection, confidence filtering, anti-forgetting, teacher-student averaging, and source anchoring ideas.
+
+Probe-commit rule:
+
+```text
+1. snapshot adapted BN affine parameters
+2. perform one tentative Tent update
+3. compare frozen-source and post-update predictions
+4. commit only if:
+   - post-update normalized entropy is lower than source entropy by a margin
+   - few high-confidence source predictions are flipped
+   - predictions do not collapse into one dominant class
+5. otherwise restore the snapshot and use source logits
+```
+
+The motivation is negative-transfer control. Unlike fixed source/adapted ensembling, probe-commit changes the adaptation dynamics: unsafe updates are not allowed to accumulate.
